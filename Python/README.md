@@ -6,7 +6,7 @@ ___
 
 # 3D transformations toolbox (Python)
 
-## This toolbox includes a few custom python codes enabling essential 3D operations
+## This repository contains custom Python codes enabling essential 3D operations
 
 __
 ## From global to local
