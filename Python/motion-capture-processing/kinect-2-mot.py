@@ -1,0 +1,126 @@
+# LIBRARIES IMPORT
+
+import os
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# DEPENDENCIES (FUNCTIONS)
+
+# SETTINGS
+
+#    Main Directory and Data type
+DATADIR = "C:/Users/bdour/Documents/Work/Toronto/Sunnybrook/Projects/ACL Injury Screening/Data"
+data_type =  'Kinect'
+
+#   List of participants
+#       Note: full list for this pipeline -> ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28']
+participants = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28']
+
+#   Trials
+#       Note: full list -> ['DVJ_0', 'DVJ_1', 'DVJ_2', 'RDist_0', 'RDist_1', 'RDist_2', 'LDist_0', 'LDist_1', 'LDist_2', 'RTimed_0', 'RTimed_1', 'RTimed_2', 'LTimed_0', 'LTimed_1', 'LTimed_2']
+trials = ['DVJ_0', 'DVJ_1', 'DVJ_2', 'RDist_0', 'RDist_1', 'RDist_2', 'LDist_0', 'LDist_1', 'LDist_2', 'RTimed_0', 'RTimed_1', 'RTimed_2', 'LTimed_0', 'LTimed_1', 'LTimed_2']
+
+# DATA PROCESSING
+
+for participant in participants:
+    print('')
+    print('Participant in progress -> ' + participant + '...')
+
+    for trial in trials:
+        print('...')
+        print('Trial in progress -> ' + trial)
+
+# EXCPETIONS
+
+        #   Skip trials that are missing or that are corrupted
+        if participant == '09' and (trial == 'DVJ_0' or trial == 'DVJ_1' or trial == 'DVJ_2' or trial == 'RDist_1' or trial == 'RDist_2') or participant == '10' and trial == 'LTimed_0' or participant == '17' and trial == 'LDist_0':
+
+            print('-> Warning! Skipped due to missing/corrupted data')
+
+        else:
+
+# PATHS DEFINITION
+
+        #   Import
+
+            #   Kinect original data (from IFT 2.0)
+            #       Path to participant folder
+            ift_path = os.path.join(DATADIR, 'Processed\\Biomechanical variables\\' + data_type + '\\Original\\' + participant)
+            #       Path to trial file
+            ift_file_path = os.path.join(ift_path, data_type + '-' + participant + '_' + trial + '_bvars.csv')
+
+            #   Kinect OpenSim data (motion files)
+            #       Path to participant folder
+            os_path = os.path.join(DATADIR, 'Raw\\' + data_type + '\\OpenSim\\Model 1 (hip and knee translations enabled)\\' + participant)
+            #       Path to trial file
+            os_file_path = os.path.join(os_path, data_type + '-' + participant + '_' + trial + '.mot')
+
+        #   Export
+            #       Path for biomechanical variables
+            export_path = os.path.join(DATADIR, 'Raw\\' + data_type + '\\OpenSim\\IFT 2.0 to motion files\\' + participant + '\\' + data_type + '-' + participant + '_' + trial + '.mot')
+            export_path_txt = os.path.join(DATADIR, 'Raw\\' + data_type + '\\OpenSim\\IFT 2.0 to motion files\\' + participant + '\\' + data_type + '-' + participant + '_' + trial + '.txt')
+
+# DATA IMPORT
+
+            #   Read the Kinect IFT 2.0 .csv file
+            ift_data = pd.read_csv(ift_file_path, skiprows=1)
+
+            #   Read the OpenSim .mot file
+            mot_data = pd.read_csv(os_file_path, sep='\t', lineterminator='\r', skiprows=10)
+
+            print('-> Data imported')
+
+# DATA FORMATING
+
+            #   Determine length of generated motion file based on the shortest length between IFT and OpenSim data
+            #       Note: the -1 and -2 are because often these files end up with the last row being NaNs
+            mot_length = min(len(ift_data)-1, len(mot_data)-2)
+
+            #   Apply length to both datasets to ensure same length
+            ift_data = ift_data.iloc[:mot_length]
+            mot_data = mot_data.iloc[:mot_length]
+
+            #   Fix the time column (columns name = '\ntime' and each row value has '\n' in it which prevents pandas from seeing the column as numerical values)
+            mot_data = mot_data.rename(columns={'\ntime': 'time'})
+            mot_data['time'] = mot_data['time'].apply(lambda x: float(x.split()[0]))
+
+            #   Edit OpenSim motion file by replacing Hip and Knee angles columns using data from the IFT 2.0
+            #       Note: internal rotations will be fixed at 0
+            mot_data['RH_ab'] = -ift_data.iloc[:,7]
+            mot_data['RH_fl'] = -ift_data.iloc[:,8]
+            mot_data['RH_int'] = -ift_data.iloc[:,9]*0
+            mot_data['LH_ab'] = -ift_data.iloc[:,11]
+            mot_data['LH_fl'] = -ift_data.iloc[:,12]
+            mot_data['LH_int'] = -ift_data.iloc[:,13]*0
+            mot_data['RK_ab'] = -ift_data.iloc[:,15]
+            mot_data['RK_fl'] = -ift_data.iloc[:,16]
+            mot_data['RK_int'] = -ift_data.iloc[:,17]*0
+            mot_data['LK_ab'] = -ift_data.iloc[:,19]
+            mot_data['LK_fl'] = -ift_data.iloc[:,20]
+            mot_data['LK_int'] = -ift_data.iloc[:,21]*0
+
+# RESULTS EXPORT
+
+            #   Generate a .txt file with the first few description rows present in the .mot files generated by OpenSim
+            desc_file = open(export_path_txt, 'a')
+            desc_file.write('Coordinates\nversion=1\nnRows='+str(mot_length)+'\nnColumns=42\ninDegrees=yes\n\nUnits are S.I. units (second, meters, Newtons, ...)\nAngles are in degrees.\n\nendheader\n')
+            desc_file.close()
+            #   Re-open the .txt file generated above and append the edited mot_data
+            with open(export_path_txt, 'a') as mot:
+               mot.write(mot_data.to_string(index=False))
+
+            #   Change extension from .txt to .mot
+            #       Note: when trying to generate a .mot file directly (by editing export_path_txt with a .mot extension), the resulting file seem to have the wrong architecture. This problem was fixed by generating a .txt file first, then using the os.replace() function to change the extension to .mot
+            os.replace(export_path_txt, export_path)
+
+            print('-> Results exported')
+
+print('')
+print('--------------')
+print('CODE COMPLETED')
+print('--------------')
+
+
+
+
